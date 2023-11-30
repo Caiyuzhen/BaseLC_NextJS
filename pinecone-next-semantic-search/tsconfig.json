@@ -10,7 +10,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-	"noImplicitAny": false,
+	"noImplicitAny": false, // 关闭类型检测
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
