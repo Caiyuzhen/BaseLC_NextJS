@@ -3,8 +3,10 @@ import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter'
 import { OpenAI } from 'langchain/llms/openai'
 import { loadQAStuffChain } from 'langchain/chains'
 import { timeout } from '../config'
+import { Document } from "langchain/document";
 
-// 🌟 上传数据到 Pinecone 的方法 ————————————————————————————————————————————————————————————
+
+// 🌟 新增 Pinecone 数据库的一条【索引】 ————————————————————————————————————————————————————————————
 export const createPineconeIndex = async (
 	client,// 数据库客户端
 	indexName, // 索引名称
@@ -36,7 +38,7 @@ export const createPineconeIndex = async (
 
 
 
-// 🌟 更新 Pinecone 数据库的方法 ————————————————————————————————————————————————————————————
+// 🌟 修改 Pinecone 数据库的方法 ————————————————————————————————————————————————————————————
 export const updatePinecone = async (client, indexName, docs) => { //🌟 docs 为要保存在 Pinecone 数据库内的文档
 	// 1. 解构赋值, 取回索引
 	const index = client.Index(indexName)
@@ -88,4 +90,57 @@ export const updatePinecone = async (client, indexName, docs) => { //🌟 docs �
 			}
 		}
 	}
+}
+
+
+
+// 🌟 查询 Pinecone 数据库的方法 ————————————————————————————————————————————————————————————
+export const queryPineconeVectorStoreAndQueryLLM = async (
+	client,
+	indexName,
+	question
+) => {
+	// 1. 开始 query 查询数据
+	const index = client.Index(indexName)
+	
+	// 2. 创建 query 的 embedding 
+	const queryEmbedding = await new OpenAIEmbeddings().embedQuery(question)
+
+	// 3. 查询 pinecone 数据
+	let queryResponse = await index.query({
+		queryRequest: {
+			topK: 10, // topK 表示返回的最佳匹配项的数量
+			vector: queryEmbedding,// 🌟 queryEmbedding 为上方创建的 query 的 embedding, 也就是【问题的向量化】
+			includeMetadata: true, // 表示是否返回与每个向量关联的元数据
+			includeValues: true, // 表示 Pinecone 是否返回与每个向量关联的值
+		}
+	})
+	console.log(`找到了${queryResponse.matches.length} matches...`);
+	console.log(`正在询问${question} ...`);
+
+	// 4. 有数据则调用 openAI 把内容给到 llm 进行回答
+	if(queryResponse.matches.length) { // 如果有数据
+		// 造一个 chain
+		const llm = new OpenAI({}) // 实例化
+		const chain = loadQAStuffChain(llm) // 加载到 chain 中 => 创建一个【🌟 内容链】 => 🔥 loadQAStuffChain 只是把所有返回的内容作为 prompt 塞入到 llm 内 !!
+
+		// 把从数据库内查询出来的内容【映射】到一个数组内
+		const concatenatePageContent = queryResponse.matches 
+			.map((match) => match.metadata.pageContent)
+			.join(" ")
+		
+		// 把上下文给到 chain, 从 chain 中 call 出内容来
+		const docs = [new Document({ pageContent: concatenatePageContent })]
+		const result = await chain.call({ 
+			input_documents: docs, // 🌟 这里的 input_documents 是传入给 llm 的上下文, 因为在 prompt 中定义了这个上下文的变量名为 {{input_documents}}
+			question: question
+		})
+		console.log(`回答: ${result.text}`);
+		return result.text;
+	} else {
+		// 没有数据则返回空
+		console.log(`在 pinecone 没有找到匹配的内容...`);
+		return null;
+	}
+
 }
