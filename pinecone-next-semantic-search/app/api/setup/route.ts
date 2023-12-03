@@ -7,10 +7,10 @@ import { createPineconeIndex, updatePinecone } from '@/utils/utils'
 import { indexName } from '@/config' // 自己配置的【数据库索引名】
 
 
-// 🌟 修改数据库的 post 请求 => 加载文件 、 把文件 向量化 
+// 🌟 修改数据库的 post 请求 => 加载文件  把文件 【embedding 向量化】 并【传入 pinecone 数据库】
 export async function POST() {
 	// 🔥 实例化文件加载器, 用来加载文本、Markdown、PDF 文件
-	const loader = new DirectoryLoader('./documents', { // 🌟 从指定目录（在这里是 './documents'）加载文件 => 配置了三种文件类型的加载器: 文本文件（.txt）、Markdown文件（.md），以及PDF文件（.pdf）
+	const loader = new DirectoryLoader('./documents', { // 🌟 从指定的目录内【🚀读取文档, 然后拆分为 embedding !】（在这里是 './documents' => 默认从根文件夹开始读）加载文件 => 配置了三种文件类型的加载器: 文本文件（.txt）、Markdown文件（.md），以及PDF文件（.pdf）
 		".txt": (path) => new TextLoader(path),
 		".md": (path) => new TextLoader(path),
 		".pdf": (path) => new PDFLoader(path),
@@ -27,10 +27,8 @@ export async function POST() {
 
 	try {
 		// 新增 Pinecone 数据库的一条【索引】
-		await createPineconeIndex(client, indexName, vectorDimension) 
-
-		// 修改 Pinecone 数据库
-		await updatePinecone(client, indexName, docs) // 把 docs 文档上传上去
+		await createPineconeIndex(client, indexName, vectorDimension)  // 创建实例
+		await updatePinecone(client, indexName, docs) // 更新 Pinecone 数据库, 把 docs 文档上传上去
 
 	} catch(err) {
 		console.log("❌ 报错:", err);
